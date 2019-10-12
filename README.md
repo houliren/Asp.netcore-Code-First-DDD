@@ -24,6 +24,9 @@ Asp.NetCore使用DDD+codefirst
 
 
 #### 使用说明
-该文件为Asp.netcore +Efcore+mysql+codefrist+伪DDD的四层 开发模板，下载即可使用
+该文件为Asp.netcore +Efcore+mysql+codefrist+伪DDD的四层 开发模板，下载即可使用.
+
+#### 维护说明
+该开发模板会持续维护和更新，会渐渐的维护更新为一个好用和实用的开发模板
 
 具体构建过程：https://blog.csdn.net/qq_38762313/article/details/100765606
