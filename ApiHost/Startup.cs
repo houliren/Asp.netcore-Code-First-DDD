@@ -11,7 +11,7 @@ using Swashbuckle.AspNetCore.Swagger;
 using System;
 using System.IO;
 
-namespace Api
+namespace ApiHost
 {
     public class Startup
     {
