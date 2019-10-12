@@ -1,10 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\AspNetCoreCodeFristDDD",
-    "\\AspNetCoreCodeFristDDD\\ApiController",
-    "\\AspNetCoreCodeFristDDD\\CodeFristDDD"
+    "\\CodeFristDDD"
   ],
-  "SelectedNode": "\\AspNetCoreCodeFristDDD\\CodeFristDDD\\CodeFristDDD.sln",
+  "SelectedNode": "\\CodeFristDDD\\CodeFristDDD.sln",
   "PreviewInSolutionExplorer": false
 }

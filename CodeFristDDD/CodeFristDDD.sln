@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Controller", "..\ApiControl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Domain", "..\Domain\Domain.csproj", "{375957D4-BD96-4EB6-A63D-B27C2E0F1CCE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dto", "..\Dto\Dto.csproj", "{87AC6E91-13FB-45A7-B418-121D266B20D0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dto", "..\Dto\Dto.csproj", "{87AC6E91-13FB-45A7-B418-121D266B20D0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
