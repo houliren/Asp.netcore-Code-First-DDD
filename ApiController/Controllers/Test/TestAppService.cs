@@ -39,7 +39,6 @@ namespace Controller.Controllers.Test
         {
             Domain.Domains.Tests.Test test = new Domain.Domains.Tests.Test();
             test.HelloWorld="你好世界";
-            test.ddd =2;
             EfContent.Add(test);
             EfContent.SaveChanges();
             return "写入成功";

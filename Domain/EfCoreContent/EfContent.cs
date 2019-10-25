@@ -10,13 +10,19 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Design;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
+using MySql.Data.MySqlClient;
 using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading.Tasks;
+
 
 namespace Domain.EfCoreContent
 {
@@ -51,7 +57,53 @@ namespace Domain.EfCoreContent
     }
 
 
+    public static class EntityFrameworkCoreExtensions
+    {
 
+        public static DataTable SqlQuery(this EfContent efcontent, string sql, params object[] commandParameters)
+        {
+            var dt = new DataTable();
+            using (var connection = efcontent.Database.GetDbConnection())
+            {
+                using (var cmd = connection.CreateCommand())
+                {
+                    efcontent.Database.OpenConnection();
+                    cmd.CommandText = sql;
+
+                    if (commandParameters != null && commandParameters.Length > 0)
+                        cmd.Parameters.AddRange(commandParameters);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        dt.Load(reader);
+                    }
+                }
+            }
+            return dt;
+        }
+
+        public static List<T> SqlQuery<T>(this EfContent efcontent, string sql, params object[] parameters) where T : class, new()
+        {
+            var dt = SqlQuery(efcontent, sql, parameters);
+            return dt.ToList<T>();
+        }
+
+        public static List<T> ToList<T>(this DataTable dt) where T : class, new()
+        {
+            var propertyInfos = typeof(T).GetProperties();
+            var list = new List<T>();
+            foreach (DataRow row in dt.Rows)
+            {
+                var t = new T();
+                foreach (PropertyInfo p in propertyInfos)
+                {
+                    if (dt.Columns.IndexOf(p.Name) != -1 && row[p.Name] != DBNull.Value)
+                        p.SetValue(t, row[p.Name], null);
+                }
+                list.Add(t);
+            }
+            return list;
+        }
+    }
 
     /// <summary>
     /// 给efcontent扩展自动处理数据库版本的方法
@@ -77,40 +129,80 @@ namespace Domain.EfCoreContent
             catch (DbException) { }
             // 需要从历史版本库中取出快照定义，反序列化成类型 GetDifferences(快照模型, context.Model);
             // 实际情况下要传入历史快照
-            var modelDiffer = _dbContext.GetInfrastructure().GetService<IMigrationsModelDiffer>();
+            var modelDiffer = _dbContext.Database.GetService<IMigrationsModelDiffer>();
             if (modelDiffer.HasDifferences(lastModel, _dbContext.Model))
             {
                 // 用 IMigrationsModelDiffer 的 GetDifferences 方法获取迁移的操作对象
                 var upOperations = modelDiffer.GetDifferences(lastModel, _dbContext.Model);
-                using (var trans = _dbContext.Database.BeginTransaction())
+
+
+                List<string> sqlChangeColumNameList = new List<string>();
+                List<MigrationOperation> list = new List<MigrationOperation>();
+                foreach (var upOperation in upOperations)
                 {
+                    if (upOperation is RenameColumnOperation)
+                    {
+                        string column_type = string.Empty;
+                        string sql = "select column_type from information_schema.columns where table_name='" + (upOperation as RenameColumnOperation).Table + "'  and column_name='" + (upOperation as RenameColumnOperation).Name + "'";
+                        var dataTable = _dbContext.SqlQuery(sql);
+                        if (dataTable != null && dataTable.Rows.Count > 0)
+                        {
+                            column_type = dataTable.Rows[0].ItemArray[0].ToString();
+                        }
+                        sqlChangeColumNameList.Add("alter table " + (upOperation as RenameColumnOperation).Table + " change  column " + (upOperation as RenameColumnOperation).Name + " " + (upOperation as RenameColumnOperation).NewName + " " + column_type + " ;");
+                    }
+                    else
+                    {
+                        list.Add(upOperation);
+                    }
+                }
+                try
+                {
+                    using (var trans = _dbContext.Database.BeginTransaction())
+                    {
+
+                        sqlChangeColumNameList.ForEach(cmd => _dbContext.Database.ExecuteSqlCommand(cmd));
+                        _dbContext.Database.CommitTransaction();
+                    }
+                }
+                catch (DbException ex)
+                {
+                    _dbContext.Database.RollbackTransaction();
+                }
+                if (list.Count > 0)
+                {
+                    //通过 IMigrationsSqlGenerator 将操作迁移操作对象生成迁移的sql脚本，并执行
+                    var sqlList = _dbContext.Database.GetService<IMigrationsSqlGenerator>()
+                        .Generate(list, _dbContext.Model)
+                        .ToList();
+
+
                     try
                     {
-                        // 通过 IMigrationsSqlGenerator 将操作迁移操作对象生成迁移的sql脚本，并执行
-                        _dbContext.GetInfrastructure()
-                            .GetRequiredService<IMigrationsSqlGenerator>()
-                            .Generate(upOperations, _dbContext.Model)
-                            .ToList()
-                            .ForEach(cmd => _dbContext.Database.ExecuteSqlCommand(cmd.CommandText));
-                        _dbContext.Database.CommitTransaction();
+                        using (var trans = _dbContext.Database.BeginTransaction())
+                        {
+
+                            sqlList.ForEach(cmd => _dbContext.Database.ExecuteSqlCommand(cmd.CommandText));
+                            _dbContext.Database.CommitTransaction();
+                        }
                     }
                     catch (DbException ex)
                     {
                         _dbContext.Database.RollbackTransaction();
-                        throw ex;
-                    }
-                    // 生成新的快照，存起来
-                    var snapshotCode = new DesignTimeServicesBuilder(typeof(EfContent).Assembly, Assembly.GetEntryAssembly(), new OperationReporter(new OperationReportHandler()), new string[0])
-                        .Build((DbContext)_dbContext)
-                        .GetService<IMigrationsCodeGenerator>()
-                        .GenerateSnapshot("Domain.Migrations", typeof(EfContent), "EfContentModelSnapshot", _dbContext.Model);//modelSnapshotNamespace：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）modelSnapshotName：动态生成类的名称
-                    _dbContext.Set<MigrationLog>().Add(new MigrationLog()
-                    {
-                        SnapshotDefine = snapshotCode,
-                        MigrationTime = DateTime.Now
-                    });
-                    _dbContext.SaveChanges();
+                    } 
                 }
+
+                // 生成新的快照，存起来
+                var snapshotCode = new DesignTimeServicesBuilder(typeof(EfContent).Assembly, Assembly.GetEntryAssembly(), new OperationReporter(new OperationReportHandler()), new string[0])
+                    .Build((DbContext)_dbContext)
+                    .GetService<IMigrationsCodeGenerator>()
+                    .GenerateSnapshot("ApiHost.Migrations", typeof(EfContent), "EfContentModelSnapshot", _dbContext.Model);//modelSnapshotNamespace：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）modelSnapshotName：动态生成类的名称
+                _dbContext.Set<MigrationLog>().Add(new MigrationLog()
+                {
+                    SnapshotDefine = snapshotCode,
+                    MigrationTime = DateTime.Now
+                });
+                _dbContext.SaveChanges();
             }
         }
 
@@ -132,7 +224,7 @@ namespace Domain.EfCoreContent
                     MetadataReference.CreateFromFile(typeof(Object).Assembly.Location),
                     MetadataReference.CreateFromFile(typeof(EfContent).Assembly.Location)
                 });
-            var compilation = CSharpCompilation.Create("Domain.Migrations")//assemblyName：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）和生成快照时要保持一直
+            var compilation = CSharpCompilation.Create("ApiHost.Migrations")//assemblyName：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）和生成快照时要保持一直
                 .WithOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
                 .AddReferences(references)
                 .AddSyntaxTrees(SyntaxFactory.ParseSyntaxTree(codedefine));
@@ -140,7 +232,7 @@ namespace Domain.EfCoreContent
             {
                 var compileResult = compilation.Emit(stream);
                 return compileResult.Success
-                    ? Assembly.Load(stream.GetBuffer()).CreateInstance("Domain.Migrations.EfContentModelSnapshot") as ModelSnapshot //typeName即生成的快照时设置的modelSnapshotNamespace+modelSnapshotName（nameplace+动态生成类的名称）
+                    ? Assembly.Load(stream.GetBuffer()).CreateInstance("ApiHost.Migrations.EfContentModelSnapshot") as ModelSnapshot //typeName即生成的快照时设置的modelSnapshotNamespace+modelSnapshotName（nameplace+动态生成类的名称）
                     : null;
             }
         }

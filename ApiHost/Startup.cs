@@ -40,7 +40,7 @@ namespace ApiHost
             });
 
             services.AddDbContextPool<EfContent>(options =>
-                options.UseMySQL("Database = 'studyddd'; Data Source = 'localhost'; User Id = 'root'; Password = ''; charset = 'utf8'; pooling = true; Allow Zero Datetime = True;Allow User Variables=True;TreatTinyAsBoolean=false",b=>b.MigrationsAssembly("Api")), 200);
+                options.UseMySQL("Database = 'studyddd'; Data Source = 'localhost'; User Id = 'root'; Password = ''; charset = 'utf8'; pooling = true; Allow Zero Datetime = True;Allow User Variables=True;TreatTinyAsBoolean=false", b=>b.MigrationsAssembly("ApiHost")), 200);
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
             //动态生成Api接口
@@ -54,7 +54,7 @@ namespace ApiHost
 
                 options.SwaggerDoc("v1", new Info { Title = "My API", Version = "v1" });
                 var basePath = Path.GetDirectoryName(typeof(Program).Assembly.Location);//获取代码运行的相对路径
-                options.IncludeXmlComments(Path.Combine(basePath, "Api.xml"), true);//插入代码上的注释放入Swagger
+                options.IncludeXmlComments(Path.Combine(basePath, "ApiHost.xml"), true);//插入代码上的注释放入Swagger
                 options.IncludeXmlComments(Path.Combine(basePath, "ApiController.xml"), true);
             });
         }
