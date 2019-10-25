@@ -6,7 +6,7 @@ using System.Data.Common;
 using System.Reflection;
 using System.Text;
 
-namespace Domain.EfCoreContent.EfCoreFun
+namespace Domain.EfCoreContent
 {
     /// <summary>
     /// efcore扩展sql查询

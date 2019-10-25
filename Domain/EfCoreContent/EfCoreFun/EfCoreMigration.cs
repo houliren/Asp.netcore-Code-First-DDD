@@ -17,7 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace Domain.EfCoreContent.EfCoreFun
+namespace Domain.EfCoreContent
 {
     /// <summary>
     /// 给efcontent扩展自动处理数据库版本的方法
@@ -37,7 +37,7 @@ namespace Domain.EfCoreContent.EfCoreFun
                 var lastMigration = _dbContext.Set<MigrationLog>()
                     .OrderByDescending(e => e.Id)
                     .FirstOrDefault();
-                lastModel = lastMigration == null ? null : (CreateModelSnapshot(lastMigration.SnapshotDefine)?.Model);
+                lastModel = lastMigration == null ? null : (CreateModelSnapshot(lastMigration.SnapshotDefine, "ApiHost.Migrations", "EfContentModelSnapshot")?.Model);
             }
             catch (DbException) { }
             var modelDiffer = _dbContext.Database.GetService<IMigrationsModelDiffer>();
@@ -51,10 +51,8 @@ namespace Domain.EfCoreContent.EfCoreFun
                 Migrationing(upOperations, _dbContext);
 
                 // 生成新的快照，存起来
-                var snapshotCode = new DesignTimeServicesBuilder(typeof(EfContent).Assembly, Assembly.GetEntryAssembly(), new OperationReporter(new OperationReportHandler()), new string[0])
-                    .Build((DbContext)_dbContext)
-                    .GetService<IMigrationsCodeGenerator>()
-                    .GenerateSnapshot("ApiHost.Migrations", typeof(EfContent), "EfContentModelSnapshot", _dbContext.Model);//modelSnapshotNamespace：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）modelSnapshotName：动态生成类的名称
+                var snapshotCode = ModelSnapshotToString(_dbContext, "ApiHost.Migrations", "EfContentModelSnapshot");
+
                 _dbContext.Set<MigrationLog>().Add(new MigrationLog()
                 {
                     SnapshotDefine = snapshotCode,
@@ -118,11 +116,31 @@ namespace Domain.EfCoreContent.EfCoreFun
 
 
         /// <summary>
+        /// 把model生成快照
+        /// </summary>
+        /// <param name="_dbContext">efcontent</param>
+        /// <param name="nameSpace">快照类的空间名称</param>
+        /// <param name="className">快照类的名称</param>
+        /// <returns></returns>
+        private static string ModelSnapshotToString(EfContent _dbContext, string nameSpace, string className)
+        {
+            var snapshotCode = new DesignTimeServicesBuilder(typeof(EfContent).Assembly, Assembly.GetEntryAssembly(), new OperationReporter(new OperationReportHandler()), new string[0])
+                    .Build((DbContext)_dbContext)
+                    .GetService<IMigrationsCodeGenerator>()
+                    .GenerateSnapshot(nameSpace, typeof(EfContent), className, _dbContext.Model);//modelSnapshotNamespace：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）modelSnapshotName：动态生成类的名称
+            return snapshotCode;
+        }
+
+
+
+        /// <summary>
         /// 把实体的string转成该对象
         /// </summary>
         /// <param name="codedefine"></param>
+        /// <param name="nameSpace">快照类的空间名称</param>
+        /// <param name="className">快照类的名称</param>
         /// <returns></returns>
-        private static ModelSnapshot CreateModelSnapshot(string codedefine)
+        private static ModelSnapshot CreateModelSnapshot(string codedefine, string nameSpace, string className)
         {
             // 生成快照，需要存到数据库中供更新版本用
             var references = typeof(EfContent).Assembly
@@ -135,15 +153,16 @@ namespace Domain.EfCoreContent.EfCoreFun
                     MetadataReference.CreateFromFile(typeof(Object).Assembly.Location),
                     MetadataReference.CreateFromFile(typeof(EfContent).Assembly.Location)
                 });
-            var compilation = CSharpCompilation.Create("ApiHost.Migrations")//assemblyName：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）和生成快照时要保持一直
+            var compilation = CSharpCompilation.Create(nameSpace)//assemblyName：给动态生成类添加nameplace（必须和当前代码所在的命名控件下或者一样）和生成快照时要保持一直
                 .WithOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
                 .AddReferences(references)
                 .AddSyntaxTrees(SyntaxFactory.ParseSyntaxTree(codedefine));
+
             using (var stream = new MemoryStream())
             {
                 var compileResult = compilation.Emit(stream);
                 return compileResult.Success
-                    ? Assembly.Load(stream.GetBuffer()).CreateInstance("ApiHost.Migrations.EfContentModelSnapshot") as ModelSnapshot //typeName即生成的快照时设置的modelSnapshotNamespace+modelSnapshotName（nameplace+动态生成类的名称）
+                    ? Assembly.Load(stream.GetBuffer()).CreateInstance(nameSpace + "." + className) as ModelSnapshot //typeName即生成的快照时设置的modelSnapshotNamespace+modelSnapshotName（nameplace+动态生成类的名称）
                     : null;
             }
         }
