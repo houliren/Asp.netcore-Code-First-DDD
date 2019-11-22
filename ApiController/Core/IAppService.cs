@@ -7,21 +7,22 @@ namespace Controller.Core
     [DynamicWebApi]
     public interface IAppService : IDynamicWebApi
     {
+
         /// <summary>
-        /// 传入实体内容，转化为对应的Dto
+        /// 实体转实体
         /// </summary>
-        /// <typeparam name="TDto">要转化的Dto类</typeparam>
-        /// <param name="entity">传入的实体数据</param>
+        /// <typeparam name="T">要转成的实体</typeparam>
+        /// <param name="needToEntity">需要转的实体</param>
         /// <returns></returns>
-        TDto EntityToDto<TDto>(object entity) where TDto : class, new();
+        T EntityToEntity<T>(object needToEntity) where T : class, new();
 
 
         /// <summary>
-        /// 传入List实体内容，转化为对应的List Dto
+        /// 把dto的值全部赋值到entity上
         /// </summary>
-        /// <typeparam name="TDto"></typeparam>
-        /// <param name="entityList">传入的List实体数据</param>
+        /// <param name="entity"></param>
+        /// <param name="dto"></param>
         /// <returns></returns>
-        List<TDto> EntityToDto<TDto>(List<object> entityList) where TDto : class, new();
+        T DtoAssignmentEntity<T>(T entity, object dto) where T : class, new();
     }
 }

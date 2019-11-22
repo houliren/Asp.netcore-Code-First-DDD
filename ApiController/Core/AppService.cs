@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -15,56 +16,77 @@ namespace Controller.Core
 
 
         /// <summary>
-        /// 传入实体内容，转化为对应的Dto
+        /// 实体转实体
         /// </summary>
-        /// <typeparam name="TDto">要转化的Dto类</typeparam>
-        /// <param name="entity">传入的实体数据</param>
+        /// <typeparam name="T">要转成的实体</typeparam>
+        /// <param name="needToEntity">需要转的实体</param>
         /// <returns></returns>
-        public TDto EntityToDto<TDto>(object entity) where TDto : class, new()
+        public T EntityToEntity<T>(object needToEntity) where T : class, new()
         {
-            return Entitytodto<TDto>(entity);
-        }
-
-
-        /// <summary>
-        /// 传入List实体内容，转化为对应的List Dto
-        /// </summary>
-        /// <typeparam name="TDto"></typeparam>
-        /// <param name="entityList">传入的List实体数据</param>
-        /// <returns></returns>
-        public List<TDto> EntityToDto<TDto>(List<object> entityList) where TDto : class, new()
-        {
-            List<TDto> list = new List<TDto>();
-            foreach (var childObject in entityList)
-            {
-                list.Add(Entitytodto<TDto>(childObject));
-            }
-            return list;
+            return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(needToEntity));
         }
 
         /// <summary>
-        /// 传入实体内容，转化为对应的Dto
+        /// 把dto的值全部赋值到entity上
         /// </summary>
-        /// <typeparam name="TDto"></typeparam>
         /// <param name="entity"></param>
+        /// <param name="dto"></param>
         /// <returns></returns>
-        private TDto Entitytodto<TDto>(object entity) where TDto : class, new()
+        public T DtoAssignmentEntity<T>(T entity, object dto) where T : class, new()
         {
-            TDto dto = new TDto();
-            PropertyInfo[] propertyInfos = entity.GetType().GetProperties();
-            PropertyInfo[] dtoproperty = dto.GetType().GetProperties();
-            for (int i = 0; i < propertyInfos.Length; i++)
+            return DtoAssignmentEntityRecursion(entity, dto) as T;
+        }
+
+        /// <summary>
+        /// 把dto的值全部赋值到entity上的递归函数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="entity"></param>
+        /// <param name="dto"></param>
+        /// <returns></returns>
+        private object DtoAssignmentEntityRecursion<T>(T entity, object dto) where T : class, new()
+        {
+            if (dto == null || entity == null)
             {
-                for (int j = 0; j < dtoproperty.Length; j++)
+                return entity;
+            }
+            System.Reflection.PropertyInfo[] properties = entity.GetType().GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            System.Reflection.PropertyInfo[] dtoproperties = dto.GetType().GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            if (properties.Length <= 0)
+            {
+                return entity;
+            }
+            if (dtoproperties.Length <= 0)
+            {
+                return entity;
+            }
+            foreach (System.Reflection.PropertyInfo item in properties)
+            {
+                foreach (var dtoItem in dtoproperties)
                 {
-                    if (propertyInfos[i].Name == dtoproperty[j].Name)
+                    if (item.Name == dtoItem.Name)
                     {
-                        dtoproperty[j].SetValue(dto, propertyInfos[i].GetValue(entity));
-                        break;
+                        if (item.PropertyType.IsValueType || item.PropertyType.Name.StartsWith("String"))
+                        {
+
+                            object value = dtoItem.GetValue(dto, null);
+                            if (value != null)
+                                item.SetValue(entity, value);
+                            break;
+                        }
+                        else
+                        {
+                            object value = item.GetValue(entity, null);
+                            object dtovalue = dtoItem.GetValue(dto, null);
+                            value = DtoAssignmentEntityRecursion(value, dtovalue);
+                            if (value != null)
+                                item.SetValue(entity, value);
+                            break;
+                        }
                     }
                 }
             }
-            return dto;
+            return entity;
         }
     }
 }
